@@ -1,0 +1,44 @@
+{
+  "tests": [
+    {
+      "name": "Статус сервера",
+      "method": "GET",
+      "path": "/?action=status",
+      "expectedStatus": 200,
+      "expectedBody": {"status": "operational"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Список инструментов",
+      "method": "GET",
+      "path": "/?action=tools",
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Список ключей",
+      "method": "GET",
+      "path": "/?action=keys",
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "MCP initialize",
+      "method": "POST",
+      "path": "/",
+      "body": {"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+      "expectedStatus": 200,
+      "expectedBody": {"jsonrpc": "2.0"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "MCP tools/list",
+      "method": "POST",
+      "path": "/",
+      "body": {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+      "expectedStatus": 200,
+      "expectedBody": {"jsonrpc": "2.0"},
+      "bodyMatcher": "partial"
+    }
+  ]
+}
