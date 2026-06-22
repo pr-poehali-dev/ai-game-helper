@@ -31,37 +31,41 @@ export interface ApiKey {
 
 export const MCP_ENDPOINT = MCP_URL;
 
+const get = (path: string) =>
+  fetch(`${MCP_URL}${path}`, { mode: 'cors' }).then((r) => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  });
+
+const post = (body: unknown) =>
+  fetch(MCP_URL, {
+    method: 'POST',
+    mode: 'cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then((r) => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  });
+
 export async function fetchStatus(): Promise<ServerStatus> {
-  const r = await fetch(`${MCP_URL}?action=status`);
-  return r.json();
+  return get('?action=status');
 }
 
 export async function fetchTools(): Promise<McpTool[]> {
-  const r = await fetch(`${MCP_URL}?action=tools`);
-  const d = await r.json();
+  const d = await get('?action=tools');
   return d.tools;
 }
 
 export async function fetchKeys(): Promise<ApiKey[]> {
-  const r = await fetch(`${MCP_URL}?action=keys`);
-  const d = await r.json();
+  const d = await get('?action=keys');
   return d.keys;
 }
 
 export async function createKey(label: string): Promise<ApiKey> {
-  const r = await fetch(MCP_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'create', label }),
-  });
-  return r.json();
+  return post({ action: 'create', label });
 }
 
 export async function revokeKey(id: number): Promise<{ revoked: boolean; id: number }> {
-  const r = await fetch(MCP_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'revoke', id }),
-  });
-  return r.json();
+  return post({ action: 'revoke', id });
 }
