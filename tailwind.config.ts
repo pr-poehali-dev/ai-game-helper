@@ -18,7 +18,12 @@ export default {
 			}
 		},
 		extend: {
+			fontFamily: {
+				sans: ['Sora', 'sans-serif'],
+				mono: ['JetBrains Mono', 'monospace'],
+			},
 			colors: {
+				warning: 'hsl(var(--warning))',
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
 				ring: 'hsl(var(--ring))',
