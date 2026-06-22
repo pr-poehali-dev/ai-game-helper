@@ -9,19 +9,23 @@ import psycopg2
 
 SCHEMA = 't_p92382610_ai_game_helper'
 PROCESS_START = time.time()
+MCP_PROTOCOL_VERSION = '2024-11-05'
 
-CORS_HEADERS = {
+# Claude.ai requires these headers on every MCP response
+MCP_HEADERS = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-User-Id, X-Auth-Token, X-Session-Id',
+    'Access-Control-Allow-Methods': 'GET, POST, HEAD, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Accept, X-Auth-Token, Authorization, Mcp-Session-Id',
+    'Access-Control-Expose-Headers': 'Mcp-Session-Id, Content-Type',
     'Access-Control-Max-Age': '86400',
     'Content-Type': 'application/json',
+    'MCP-Protocol-Version': MCP_PROTOCOL_VERSION,
 }
 
 TOOLS = [
     {
         'name': 'get_server_status',
-        'description': 'Здоровье и аптайм MCP-сервера, число подключённых клиентов и обработанных запросов.',
+        'description': 'Здоровье и аптайм MCP-сервера, число обработанных запросов.',
         'inputSchema': {'type': 'object', 'properties': {}},
     },
     {
@@ -49,6 +53,14 @@ def gen_key() -> str:
     return 'mcp_live_' + hashlib.sha256(pysecrets.token_bytes(32)).hexdigest()[:40]
 
 
+def ok(body: dict) -> dict:
+    return {'statusCode': 200, 'headers': MCP_HEADERS, 'body': json.dumps(body, ensure_ascii=False)}
+
+
+def err(code: int, msg: str) -> dict:
+    return {'statusCode': code, 'headers': MCP_HEADERS, 'body': json.dumps({'error': msg})}
+
+
 def fetch_status() -> dict:
     uptime = int(time.time() - PROCESS_START)
     conn = get_conn()
@@ -67,7 +79,7 @@ def fetch_status() -> dict:
         'status': 'operational',
         'server_started_at': datetime.fromtimestamp(PROCESS_START, tz=timezone.utc).isoformat(),
         'uptime_seconds': uptime,
-        'protocol': 'mcp-2024-11-05',
+        'protocol': MCP_PROTOCOL_VERSION,
         'transport': 'http',
         'active_keys': int(active),
         'revoked_keys': int(revoked),
@@ -89,18 +101,15 @@ def list_keys() -> list:
         cur.close()
     finally:
         conn.close()
-    result = []
-    for r in rows:
-        result.append({
-            'id': r[0],
-            'key': r[1],
-            'label': r[2],
+    return [
+        {
+            'id': r[0], 'key': r[1], 'label': r[2],
             'created_at': r[3].isoformat() if r[3] else None,
             'last_used_at': r[4].isoformat() if r[4] else None,
-            'request_count': r[5],
-            'revoked': r[6],
-        })
-    return result
+            'request_count': r[5], 'revoked': r[6],
+        }
+        for r in rows
+    ]
 
 
 def create_key(label: str) -> dict:
@@ -110,14 +119,16 @@ def create_key(label: str) -> dict:
     try:
         cur = conn.cursor()
         cur.execute(
-            f"INSERT INTO {SCHEMA}.api_keys (key_value, label) VALUES ('{key}', '{safe_label}') RETURNING id, created_at"
+            f"INSERT INTO {SCHEMA}.api_keys (key_value, label) "
+            f"VALUES ('{key}', '{safe_label}') RETURNING id, created_at"
         )
         row = cur.fetchone()
         conn.commit()
         cur.close()
     finally:
         conn.close()
-    return {'id': row[0], 'key': key, 'label': safe_label, 'created_at': row[1].isoformat(), 'request_count': 0, 'revoked': False}
+    return {'id': row[0], 'key': key, 'label': safe_label,
+            'created_at': row[1].isoformat(), 'request_count': 0, 'revoked': False}
 
 
 def revoke_key(key_id: int) -> dict:
@@ -159,18 +170,21 @@ def handle_tool_call(name: str, args: dict):
     return {'error': f'unknown tool: {name}'}
 
 
-def jsonrpc(req: dict, api_key: str) -> dict:
-    method = req.get('method')
+def handle_jsonrpc(req: dict, api_key: str) -> dict:
+    method = req.get('method', '')
     rid = req.get('id')
     if api_key:
         touch_key(api_key)
 
     if method == 'initialize':
         result = {
-            'protocolVersion': '2024-11-05',
-            'capabilities': {'tools': {}},
+            'protocolVersion': MCP_PROTOCOL_VERSION,
+            'capabilities': {'tools': {'listChanged': False}},
             'serverInfo': {'name': 'game-core-mcp', 'version': '0.1.0'},
         }
+    elif method == 'notifications/initialized':
+        # client ack — no response needed, return empty 200
+        return {'statusCode': 200, 'headers': MCP_HEADERS, 'body': ''}
     elif method == 'tools/list':
         result = {'tools': TOOLS}
     elif method == 'tools/call':
@@ -180,40 +194,67 @@ def jsonrpc(req: dict, api_key: str) -> dict:
     elif method == 'ping':
         result = {}
     else:
-        return {'jsonrpc': '2.0', 'id': rid, 'error': {'code': -32601, 'message': f'Method not found: {method}'}}
+        return ok({'jsonrpc': '2.0', 'id': rid, 'error': {'code': -32601, 'message': f'Method not found: {method}'}})
 
-    return {'jsonrpc': '2.0', 'id': rid, 'result': result}
+    return ok({'jsonrpc': '2.0', 'id': rid, 'result': result})
 
 
 def handler(event, context):
-    '''Реальный MCP-сервер игровых данных: статус, инструменты, управление API-ключами и JSON-RPC эндпоинт для Claude.'''
+    '''MCP-сервер игровых данных. Поддерживает Streamable HTTP (MCP 2024-11-05) для Claude.ai и Cloud-клиентов.'''
     method = event.get('httpMethod', 'GET')
-    if method == 'OPTIONS':
-        return {'statusCode': 200, 'headers': CORS_HEADERS, 'body': ''}
-
+    headers_in = event.get('headers') or {}
     params = event.get('queryStringParameters') or {}
-    headers = event.get('headers') or {}
-    api_key = headers.get('X-Auth-Token') or headers.get('x-auth-token') or ''
+    api_key = (headers_in.get('X-Auth-Token') or headers_in.get('x-auth-token') or
+               headers_in.get('Authorization') or headers_in.get('authorization') or '').replace('Bearer ', '')
+
+    # CORS preflight
+    if method == 'OPTIONS':
+        return {'statusCode': 200, 'headers': MCP_HEADERS, 'body': ''}
+
+    # HEAD — Claude.ai uses this to discover/validate the MCP endpoint
+    if method == 'HEAD':
+        return {'statusCode': 200, 'headers': MCP_HEADERS, 'body': ''}
 
     if method == 'GET':
-        action = params.get('action', 'status')
+        action = params.get('action', '')
         if action == 'status':
-            return {'statusCode': 200, 'headers': CORS_HEADERS, 'body': json.dumps(fetch_status())}
+            return ok(fetch_status())
         if action == 'tools':
-            return {'statusCode': 200, 'headers': CORS_HEADERS, 'body': json.dumps({'tools': TOOLS})}
+            return ok({'tools': TOOLS})
         if action == 'keys':
-            return {'statusCode': 200, 'headers': CORS_HEADERS, 'body': json.dumps({'keys': list_keys()})}
-        return {'statusCode': 400, 'headers': CORS_HEADERS, 'body': json.dumps({'error': 'unknown action'})}
+            return ok({'keys': list_keys()})
+        # No action param → MCP discovery probe, return server info
+        return ok({
+            'name': 'game-core-mcp',
+            'version': '0.1.0',
+            'protocolVersion': MCP_PROTOCOL_VERSION,
+            'status': 'operational',
+            'capabilities': {'tools': {'listChanged': False}},
+        })
 
     if method == 'POST':
-        body = json.loads(event.get('body') or '{}')
+        raw_body = event.get('body') or '{}'
+        body = json.loads(raw_body)
+
+        # MCP JSON-RPC 2.0
         if body.get('jsonrpc') == '2.0':
-            return {'statusCode': 200, 'headers': CORS_HEADERS, 'body': json.dumps(jsonrpc(body, api_key))}
+            return handle_jsonrpc(body, api_key)
+
+        # Batch JSON-RPC (array)
+        if isinstance(body, list):
+            responses = [
+                json.loads(handle_jsonrpc(req, api_key)['body'])
+                for req in body
+                if isinstance(req, dict)
+            ]
+            return ok(responses)
+
+        # Dashboard API actions
         action = body.get('action')
         if action == 'create':
-            return {'statusCode': 200, 'headers': CORS_HEADERS, 'body': json.dumps(create_key(body.get('label', 'default')))}
+            return ok(create_key(body.get('label', 'default')))
         if action == 'revoke':
-            return {'statusCode': 200, 'headers': CORS_HEADERS, 'body': json.dumps(revoke_key(body.get('id')))}
-        return {'statusCode': 400, 'headers': CORS_HEADERS, 'body': json.dumps({'error': 'unknown action'})}
+            return ok(revoke_key(body.get('id')))
+        return err(400, 'unknown action')
 
-    return {'statusCode': 405, 'headers': CORS_HEADERS, 'body': json.dumps({'error': 'method not allowed'})}
+    return err(405, 'method not allowed')

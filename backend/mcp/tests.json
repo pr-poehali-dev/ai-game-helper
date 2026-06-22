@@ -1,6 +1,20 @@
 {
   "tests": [
     {
+      "name": "HEAD — MCP discovery",
+      "method": "HEAD",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "GET / — server info",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": {"name": "game-core-mcp"},
+      "bodyMatcher": "partial"
+    },
+    {
       "name": "Статус сервера",
       "method": "GET",
       "path": "/?action=status",
