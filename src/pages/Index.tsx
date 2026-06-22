@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 
-type Tab = 'overview' | 'logs' | 'config' | 'api';
+type Tab = 'overview' | 'logs' | 'config' | 'apikey' | 'api';
 
 const NAV: { id: Tab; label: string; icon: string }[] = [
   { id: 'overview', label: 'Обзор', icon: 'LayoutDashboard' },
   { id: 'logs', label: 'Логи', icon: 'ScrollText' },
   { id: 'config', label: 'Конфигурация', icon: 'Settings2' },
+  { id: 'apikey', label: 'API-ключ', icon: 'KeyRound' },
   { id: 'api', label: 'API', icon: 'Code2' },
 ];
 
@@ -47,6 +48,7 @@ const Index = () => {
   const [tab, setTab] = useState<Tab>('overview');
   const [logs, setLogs] = useState(LOG_SEED);
   const [clock, setClock] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const i = setInterval(() => {
@@ -72,69 +74,99 @@ const Index = () => {
     return () => clearInterval(i);
   }, [tab]);
 
+  const select = (id: Tab) => {
+    setTab(id);
+    setMenuOpen(false);
+  };
+
+  const SidebarContent = (
+    <>
+      <div className="px-5 h-16 flex items-center gap-3 border-b border-border">
+        <div className="size-9 rounded-md bg-primary/15 glow-border flex items-center justify-center">
+          <Icon name="Hexagon" className="text-primary" size={20} />
+        </div>
+        <div className="leading-tight">
+          <div className="font-mono font-bold text-sm tracking-tight">MCP·CORE</div>
+          <div className="text-[10px] text-muted-foreground font-mono">game-data server</div>
+        </div>
+      </div>
+
+      <nav className="p-3 space-y-1 flex-1">
+        {NAV.map((n) => (
+          <button
+            key={n.id}
+            onClick={() => select(n.id)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all ${
+              tab === n.id
+                ? 'bg-primary/12 text-primary glow-border'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+            }`}
+          >
+            <Icon name={n.icon} size={17} />
+            {n.label}
+          </button>
+        ))}
+      </nav>
+
+      <div className="p-4 border-t border-border">
+        <div className="flex items-center gap-2 text-xs font-mono">
+          <span className="size-2 rounded-full bg-primary pulse-dot" />
+          <span className="text-primary">ONLINE</span>
+          <span className="text-muted-foreground ml-auto">v0.1.0</span>
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen flex text-foreground">
-      {/* Sidebar */}
-      <aside className="w-60 shrink-0 border-r border-border bg-card/40 backdrop-blur-sm flex flex-col fixed h-screen">
-        <div className="px-5 h-16 flex items-center gap-3 border-b border-border">
-          <div className="size-9 rounded-md bg-primary/15 glow-border flex items-center justify-center">
-            <Icon name="Hexagon" className="text-primary" size={20} />
-          </div>
-          <div className="leading-tight">
-            <div className="font-mono font-bold text-sm tracking-tight">MCP·CORE</div>
-            <div className="text-[10px] text-muted-foreground font-mono">game-data server</div>
-          </div>
-        </div>
-
-        <nav className="p-3 space-y-1 flex-1">
-          {NAV.map((n) => (
-            <button
-              key={n.id}
-              onClick={() => setTab(n.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all ${
-                tab === n.id
-                  ? 'bg-primary/12 text-primary glow-border'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
-              }`}
-            >
-              <Icon name={n.icon} size={17} />
-              {n.label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="p-4 border-t border-border">
-          <div className="flex items-center gap-2 text-xs font-mono">
-            <span className="size-2 rounded-full bg-primary pulse-dot" />
-            <span className="text-primary">ONLINE</span>
-            <span className="text-muted-foreground ml-auto">v0.1.0</span>
-          </div>
-        </div>
+      {/* Desktop sidebar */}
+      <aside className="w-60 shrink-0 border-r border-border bg-card/40 backdrop-blur-sm flex-col fixed h-screen z-30 hidden md:flex">
+        {SidebarContent}
       </aside>
 
+      {/* Mobile drawer */}
+      {menuOpen && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <div className="absolute inset-0 bg-background/70 backdrop-blur-sm" onClick={() => setMenuOpen(false)} />
+          <aside className="absolute left-0 top-0 h-full w-64 border-r border-border bg-card flex flex-col fade-up">
+            {SidebarContent}
+          </aside>
+        </div>
+      )}
+
       {/* Main */}
-      <main className="flex-1 ml-60 min-h-screen grid-bg">
+      <main className="flex-1 md:ml-60 min-h-screen grid-bg w-full">
         {/* Topbar */}
-        <header className="h-16 border-b border-border px-8 flex items-center justify-between bg-background/60 backdrop-blur-md sticky top-0 z-10">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">
-              {NAV.find((n) => n.id === tab)?.label}
-            </h1>
-            <p className="text-xs text-muted-foreground font-mono">Battlefield · region eu-west · BF-7741</p>
+        <header className="h-16 border-b border-border px-4 sm:px-8 flex items-center justify-between bg-background/60 backdrop-blur-md sticky top-0 z-20">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={() => setMenuOpen(true)}
+              className="md:hidden size-9 rounded-md border border-border flex items-center justify-center text-muted-foreground shrink-0"
+            >
+              <Icon name="Menu" size={18} />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-semibold tracking-tight truncate">
+                {NAV.find((n) => n.id === tab)?.label}
+              </h1>
+              <p className="text-xs text-muted-foreground font-mono truncate">Battlefield · eu-west · BF-7741</p>
+            </div>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="font-mono text-sm text-muted-foreground hidden sm:block">{clock}</span>
-            <button className="flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition glow-border">
+          <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+            <span className="font-mono text-sm text-muted-foreground hidden lg:block">{clock}</span>
+            <button className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition glow-border">
               <Icon name="Plug" size={15} />
-              Подключить
+              <span className="hidden sm:inline">Подключить</span>
             </button>
           </div>
         </header>
 
-        <div className="p-8 max-w-6xl">
+        <div className="p-4 sm:p-8 max-w-6xl">
           {tab === 'overview' && <Overview />}
           {tab === 'logs' && <Logs logs={logs} />}
           {tab === 'config' && <Config />}
+          {tab === 'apikey' && <ApiKey />}
           {tab === 'api' && <Api />}
         </div>
       </main>
@@ -143,8 +175,8 @@ const Index = () => {
 };
 
 const Overview = () => (
-  <div className="space-y-8">
-    <section className="fade-up rounded-xl border border-border bg-card/50 p-6 relative overflow-hidden">
+  <div className="space-y-6 sm:space-y-8">
+    <section className="fade-up rounded-xl border border-border bg-card/50 p-5 sm:p-6 relative overflow-hidden">
       <div className="absolute inset-0 grid-bg opacity-40 pointer-events-none" />
       <div className="relative flex items-start justify-between flex-wrap gap-4">
         <div>
@@ -152,7 +184,7 @@ const Overview = () => (
             <span className="size-2.5 rounded-full bg-primary pulse-dot" />
             <span className="font-mono text-xs text-primary uppercase tracking-widest">Server operational</span>
           </div>
-          <h2 className="text-3xl font-bold tracking-tight">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
             Сервер <span className="text-primary glow-text">слушает</span> игровые данные
           </h2>
           <p className="text-muted-foreground mt-2 max-w-lg text-sm">
@@ -160,32 +192,32 @@ const Overview = () => (
             MCP-протокол. Аптайм 99.98% за 30 дней.
           </p>
         </div>
-        <div className="font-mono text-right text-xs text-muted-foreground space-y-1">
+        <div className="font-mono text-xs text-muted-foreground space-y-1 sm:text-right">
           <div>endpoint</div>
-          <div className="text-foreground">mcp://core.game/sse</div>
+          <div className="text-foreground break-all">mcp://core.game/sse</div>
         </div>
       </div>
     </section>
 
-    <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       {METRICS.map((m, i) => (
         <div
           key={m.label}
-          className="fade-up rounded-xl border border-border bg-card/50 p-5 hover:glow-border transition-all"
+          className="fade-up rounded-xl border border-border bg-card/50 p-4 sm:p-5 hover:glow-border transition-all"
           style={{ animationDelay: `${i * 70}ms` }}
         >
           <div className="flex items-center justify-between mb-4">
             <Icon name={m.icon} className="text-primary" size={20} />
             <span className={`font-mono text-xs ${m.up ? 'text-primary' : 'text-destructive'}`}>{m.delta}</span>
           </div>
-          <div className="text-3xl font-bold font-mono tracking-tight">{m.value}</div>
+          <div className="text-2xl sm:text-3xl font-bold font-mono tracking-tight">{m.value}</div>
           <div className="text-xs text-muted-foreground mt-1">{m.label}</div>
         </div>
       ))}
     </section>
 
     <section className="grid lg:grid-cols-3 gap-4">
-      <div className="lg:col-span-2 rounded-xl border border-border bg-card/50 p-6">
+      <div className="lg:col-span-2 rounded-xl border border-border bg-card/50 p-5 sm:p-6">
         <h3 className="font-semibold mb-4 flex items-center gap-2">
           <Icon name="Radio" size={17} className="text-primary" /> Активные подключения
         </h3>
@@ -195,17 +227,17 @@ const Overview = () => (
             { c: 'robokassa-bot', ip: '10.0.4.88', t: 'HTTP', s: 'idle' },
             { c: 'cloud-worker-3', ip: '10.0.7.12', t: 'SSE', s: 'streaming' },
           ].map((c) => (
-            <div key={c.c} className="flex items-center gap-3 font-mono text-sm py-2 border-b border-border/50 last:border-0">
-              <span className={`size-2 rounded-full ${c.s === 'streaming' ? 'bg-primary pulse-dot' : 'bg-muted-foreground'}`} />
-              <span className="text-foreground">{c.c}</span>
-              <span className="text-muted-foreground">{c.ip}</span>
-              <span className="ml-auto text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground">{c.t}</span>
+            <div key={c.c} className="flex items-center gap-3 font-mono text-xs sm:text-sm py-2 border-b border-border/50 last:border-0">
+              <span className={`size-2 rounded-full shrink-0 ${c.s === 'streaming' ? 'bg-primary pulse-dot' : 'bg-muted-foreground'}`} />
+              <span className="text-foreground truncate">{c.c}</span>
+              <span className="text-muted-foreground hidden sm:inline">{c.ip}</span>
+              <span className="ml-auto text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground shrink-0">{c.t}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-card/50 p-6">
+      <div className="rounded-xl border border-border bg-card/50 p-5 sm:p-6">
         <h3 className="font-semibold mb-4 flex items-center gap-2">
           <Icon name="Cpu" size={17} className="text-primary" /> Нагрузка
         </h3>
@@ -235,14 +267,14 @@ const Logs = ({ logs }: { logs: typeof LOG_SEED }) => (
       <span className="size-3 rounded-full bg-destructive/70" />
       <span className="size-3 rounded-full bg-warning/70" />
       <span className="size-3 rounded-full bg-primary/70" />
-      <span className="ml-3 font-mono text-xs text-muted-foreground">mcp-core — event stream</span>
+      <span className="ml-3 font-mono text-xs text-muted-foreground hidden sm:inline">mcp-core — event stream</span>
       <span className="ml-auto flex items-center gap-1.5 font-mono text-xs text-primary">
         <span className="size-1.5 rounded-full bg-primary pulse-dot" /> live
       </span>
     </div>
-    <div className="p-4 font-mono text-[13px] leading-relaxed max-h-[60vh] overflow-y-auto scrollbar-thin">
+    <div className="p-4 font-mono text-xs sm:text-[13px] leading-relaxed max-h-[60vh] overflow-y-auto overflow-x-auto scrollbar-thin">
       {logs.map((l, i) => (
-        <div key={i} className="flex gap-3 py-0.5 hover:bg-white/5 px-2 -mx-2 rounded">
+        <div key={i} className="flex gap-2 sm:gap-3 py-0.5 hover:bg-white/5 px-2 -mx-2 rounded whitespace-nowrap sm:whitespace-normal">
           <span className="text-muted-foreground shrink-0">{l.t}</span>
           <span className={`shrink-0 w-10 ${lvlColor[l.lvl]}`}>{l.lvl}</span>
           <span className="text-foreground/90">{l.msg}</span>
@@ -261,7 +293,7 @@ const Config = () => {
   ];
   return (
     <div className="fade-up grid lg:grid-cols-2 gap-4">
-      <div className="rounded-xl border border-border bg-card/50 p-6 space-y-5">
+      <div className="rounded-xl border border-border bg-card/50 p-5 sm:p-6 space-y-5">
         <h3 className="font-semibold flex items-center gap-2">
           <Icon name="Gamepad2" size={18} className="text-primary" /> Подключение к игре
         </h3>
@@ -280,7 +312,7 @@ const Config = () => {
         </button>
       </div>
 
-      <div className="rounded-xl border border-border bg-card/50 p-6 space-y-5">
+      <div className="rounded-xl border border-border bg-card/50 p-5 sm:p-6 space-y-5">
         <h3 className="font-semibold flex items-center gap-2">
           <Icon name="SlidersHorizontal" size={18} className="text-primary" /> Параметры сервера
         </h3>
@@ -308,10 +340,108 @@ const Config = () => {
   );
 };
 
+const genKey = () =>
+  'mcp_' +
+  Array.from({ length: 40 }, () => 'abcdef0123456789'[Math.floor(Math.random() * 16)]).join('');
+
+const ApiKey = () => {
+  const [key, setKey] = useState('mcp_live_8f3a91c47b2e6d05af18c39e7b4d2a6c0f5e91d7');
+  const [revealed, setRevealed] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const masked = key.slice(0, 8) + '•'.repeat(28) + key.slice(-4);
+
+  const copy = () => {
+    navigator.clipboard?.writeText(key);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const snippet = `{
+  "mcpServers": {
+    "game-core": {
+      "url": "mcp://core.game/sse",
+      "apiKey": "${revealed ? key : masked}"
+    }
+  }
+}`;
+
+  return (
+    <div className="fade-up space-y-4 max-w-3xl">
+      <section className="rounded-xl border border-border bg-card/50 p-5 sm:p-6">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="size-10 rounded-md bg-primary/15 glow-border flex items-center justify-center shrink-0">
+            <Icon name="KeyRound" className="text-primary" size={20} />
+          </div>
+          <div>
+            <h3 className="font-semibold">Ваш API-ключ MCP</h3>
+            <p className="text-xs text-muted-foreground">Используйте его в Claude Desktop и Cloud-клиентах</p>
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-col sm:flex-row gap-2">
+          <div className="flex-1 flex items-center px-3 h-11 rounded-md bg-secondary border border-border font-mono text-sm overflow-x-auto scrollbar-thin">
+            <span className="whitespace-nowrap">{revealed ? key : masked}</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setRevealed((v) => !v)}
+              className="h-11 px-3 rounded-md border border-border bg-secondary hover:bg-muted transition flex items-center justify-center gap-2 text-sm"
+            >
+              <Icon name={revealed ? 'EyeOff' : 'Eye'} size={16} />
+              <span className="sm:hidden">{revealed ? 'Скрыть' : 'Показать'}</span>
+            </button>
+            <button
+              onClick={copy}
+              className="h-11 px-4 rounded-md bg-primary text-primary-foreground font-medium text-sm hover:opacity-90 transition flex items-center justify-center gap-2 grow sm:grow-0"
+            >
+              <Icon name={copied ? 'Check' : 'Copy'} size={16} />
+              {copied ? 'Скопировано' : 'Копировать'}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => {
+              setKey(genKey());
+              setRevealed(true);
+            }}
+            className="h-9 px-4 rounded-md border border-border bg-secondary hover:bg-muted transition flex items-center gap-2 text-sm"
+          >
+            <Icon name="RefreshCw" size={15} /> Сгенерировать новый
+          </button>
+          <span className="text-xs text-muted-foreground font-mono flex items-center gap-1.5">
+            <Icon name="Clock" size={13} /> создан 23.06.2026 · без срока
+          </span>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-warning/30 bg-warning/5 p-4 flex gap-3">
+        <Icon name="TriangleAlert" className="text-warning shrink-0" size={18} />
+        <p className="text-sm text-muted-foreground">
+          Храните ключ в секрете. При компрометации сразу нажмите{' '}
+          <span className="text-foreground">«Сгенерировать новый»</span> — старый перестанет работать.
+        </p>
+      </section>
+
+      <section className="rounded-xl border border-border bg-[#06100c] overflow-hidden">
+        <div className="flex items-center gap-2 px-4 h-10 border-b border-border bg-card/50">
+          <Icon name="FileJson" size={15} className="text-primary" />
+          <span className="font-mono text-xs text-muted-foreground">claude_desktop_config.json</span>
+        </div>
+        <pre className="p-4 font-mono text-xs sm:text-[13px] text-foreground/90 overflow-x-auto scrollbar-thin">
+          {snippet}
+        </pre>
+      </section>
+    </div>
+  );
+};
+
 const Api = () => (
   <div className="fade-up space-y-4">
     <div className="rounded-xl border border-border bg-card/50 p-5 flex items-center gap-4">
-      <Icon name="BookOpen" size={22} className="text-primary" />
+      <Icon name="BookOpen" size={22} className="text-primary shrink-0" />
       <div>
         <h3 className="font-semibold">Инструменты MCP-сервера</h3>
         <p className="text-xs text-muted-foreground">{TOOLS.length} методов доступно для клиентов Claude и Cloud</p>
@@ -327,8 +457,8 @@ const Api = () => (
           <span className={`font-mono text-[11px] font-bold px-2 py-0.5 rounded ${t.method === 'GET' ? 'bg-sky-500/15 text-sky-400' : 'bg-warning/15 text-warning'}`}>
             {t.method}
           </span>
-          <code className="font-mono text-sm text-primary font-semibold">{t.name}</code>
-          <span className="ml-auto font-mono text-xs text-muted-foreground">params: {t.params}</span>
+          <code className="font-mono text-sm text-primary font-semibold break-all">{t.name}</code>
+          <span className="w-full sm:w-auto sm:ml-auto font-mono text-xs text-muted-foreground">params: {t.params}</span>
         </div>
         <p className="text-sm text-muted-foreground mt-2">{t.desc}</p>
       </div>
